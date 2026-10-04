@@ -1,0 +1,6 @@
+Employee_ID,Full_Name,Email,Department,Hire_Date,Salary
+E001,Ada Lovelace,ada@company.com,Engineering,2024-01-15,120000
+E002,Alan Turing,alan@company.com,Research,2023-06-01,130000
+E003,Grace Hopper,grace@company.com,Engineering,2022-03-20,125000
+E004,Katherine Johnson,kathy@company.com,Analytics,2025-11-01,110000
+E005,Donald Knuth,don@company.com,Research,2021-09-10,140000

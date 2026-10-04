@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+backend/.aws-sam/
+backend/.localdata/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.env.local
+*.log
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+
+# Env secrets
+.env
+.env.production

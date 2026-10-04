@@ -1,0 +1,12 @@
+Customer_ID,Customer_Name,Email,Phone,Age,Gender,Country,Amount,Created_Date
+1001,Alice Smith,alice@example.com,+1-555-0101,34,Female,India,1200.50,2026-09-18
+1002,Bob Jones,bob.jones@email,555-0102,28,M,INDIA,800,2026-09-17
+1003,Carol Lee,carol@example.com,+1-555-0103,45,female,India,1500.00,2026-09-15
+1003,Carol Duplicate,carol@example.com,+1-555-0103,45,Female,india,1500.00,2026-09-15
+1004,,invalid-email,123,150,Male,USA,-50,2026-09-20
+1005,Eve Adams,eve@example.com,,22,F,United States,99.99,2028-01-01
+1006,Frank,frank@example.com,+1-555-0199,,Male,India,200,2026-08-01
+1007,Grace Hopper,grace@example.com,+1-555-0111,37,Female,India,450.25,2026-09-19
+1008,Heidi,heidi@@bad.com,not-a-phone,29,female,INDIA,300,2026-09-10
+1009,Ivan Petrov,ivan@example.com,+1-555-0122,-5,Male,India,1000,2026-09-18
+1010,Judy,judy@example.com,+1-555-0133,31,Female,,750.00,2026-09-16

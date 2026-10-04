@@ -1,0 +1,214 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: CloudDQ AI — serverless data quality platform (8 AWS services only)
+
+Globals:
+  Function:
+    Timeout: 120
+    MemorySize: 1024
+    Runtime: python3.12
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref CloudDQTable
+        BUCKET_NAME: !Ref DatasetsBucket
+        BEDROCK_MODEL_ID: !Ref BedrockModelId
+        USER_POOL_ID: !Ref UserPool
+        LOG_LEVEL: INFO
+
+Parameters:
+  BedrockModelId:
+    Type: String
+    Default: amazon.nova-lite-v1:0
+    Description: Bedrock model ID for executive summaries
+  CorsOrigin:
+    Type: String
+    Default: '*'
+    Description: Allowed CORS origin for API Gateway
+
+Resources:
+  # ─── Cognito ───────────────────────────────────────────────
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: clouddq-users
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+          RequireUppercase: true
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: clouddq-web
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+      SupportedIdentityProviders:
+        - COGNITO
+
+  DataUserGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: DataUser
+      UserPoolId: !Ref UserPool
+      Description: Data analysts — upload, analyze, correct
+
+  BusinessUserGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: BusinessUser
+      UserPoolId: !Ref UserPool
+      Description: Business stakeholders — dashboard, alerts, AI summary
+
+  # ─── S3 (private CSV storage) ──────────────────────────────
+  DatasetsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - PUT
+              - GET
+              - HEAD
+            AllowedOrigins:
+              - !Ref CorsOrigin
+            MaxAge: 3600
+
+  # ─── DynamoDB (single-table) ───────────────────────────────
+  CloudDQTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: CloudDQ
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # ─── Lambda + API Gateway ──────────────────────────────────
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: clouddq-api
+      CodeUri: src/
+      Handler: handler.lambda_handler
+      Description: CloudDQ AI single Lambda — APIs, DQ engine, alerts, Bedrock bridge
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CloudDQTable
+        - S3CrudPolicy:
+            BucketName: !Ref DatasetsBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:Converse
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - logs:CreateLogGroup
+                - logs:CreateLogStream
+                - logs:PutLogEvents
+              Resource: '*'
+      Events:
+        ProxyApi:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: ANY
+            RestApiId: !Ref CloudDQApi
+        RootApi:
+          Type: Api
+          Properties:
+            Path: /
+            Method: ANY
+            RestApiId: !Ref CloudDQApi
+
+  CloudDQApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: clouddq-api
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,PUT,PATCH,DELETE,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: !Sub "'${CorsOrigin}'"
+      Auth:
+        DefaultAuthorizer: CognitoAuthorizer
+        AddDefaultAuthorizerToCorsPreflight: false
+        Authorizers:
+          CognitoAuthorizer:
+            UserPoolArn: !GetAtt UserPool.Arn
+
+  ApiLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ApiFunction}
+      RetentionInDays: 14
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value: !Sub https://${CloudDQApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Description: Cognito App Client ID
+    Value: !Ref UserPoolClient
+  BucketName:
+    Description: Private S3 bucket for CSVs
+    Value: !Ref DatasetsBucket
+  TableName:
+    Description: DynamoDB table name
+    Value: !Ref CloudDQTable
+  Region:
+    Description: AWS Region
+    Value: !Ref AWS::Region

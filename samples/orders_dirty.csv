@@ -1,0 +1,9 @@
+Order_ID,Product,Email,Quantity,Unit_Price,Order_Date,Status
+ORD-001,Widget A,buyer1@example.com,2,19.99,2026-09-18,Shipped
+ORD-002,Widget B,not-an-email,0,-5,2026-09-19,shipped
+ORD-002,Widget B Dup,buyer2@example.com,1,25.00,2026-09-19,SHIPPED
+ORD-003,,buyer3@example.com,5,10.00,2028-12-01,Pending
+ORD-004,Gadget,buyer4@example.com,,12.50,2026-07-01,Cancelled
+ORD-005,Gadget Pro,buyer5@example.com,3,99.00,2026-09-20,Delivered
+ORD-006,Widget A,buyer6@example.com,10,19.99,2026-09-01,pending
+ORD-007,Accessory,bad@@email,2,5.00,2026-09-15,Shipped

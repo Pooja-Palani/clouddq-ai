@@ -1,0 +1,59 @@
+{
+  "info": {
+    "name": "CloudDQ AI API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:3000" },
+    { "key": "token", "value": "dev-token" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": { "method": "GET", "url": "{{baseUrl}}/health" }
+    },
+    {
+      "name": "Upload URL",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "X-Dev-Role", "value": "DataUser" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"filename\": \"customers_dirty.csv\"\n}"
+        },
+        "url": "{{baseUrl}}/datasets/upload-url"
+      }
+    },
+    {
+      "name": "List Datasets",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "X-Dev-Role", "value": "DataUser" }
+        ],
+        "url": "{{baseUrl}}/datasets"
+      }
+    },
+    {
+      "name": "Create Alert",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "X-Dev-Role", "value": "BusinessUser" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"datasetId\": \"REPLACE\",\n  \"note\": \"Please fix critical gaps\",\n  \"force\": true\n}"
+        },
+        "url": "{{baseUrl}}/alerts"
+      }
+    }
+  ]
+}
