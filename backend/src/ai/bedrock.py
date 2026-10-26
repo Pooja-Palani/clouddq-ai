@@ -10,10 +10,19 @@ import boto3
 from store import dynamo
 
 BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-lite-v1:0")
+# Comma-separated models tried in order after BEDROCK_MODEL_ID.
+BEDROCK_FALLBACK_MODEL_IDS = [
+    m.strip() for m in os.environ.get("BEDROCK_FALLBACK_MODEL_IDS", "").split(",") if m.strip()
+]
+BEDROCK_REGION = os.environ.get("BEDROCK_REGION") or None
 
 
 def _bedrock():
-    return boto3.client("bedrock-runtime")
+    return boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
+
+
+def _model_ids() -> list[str]:
+    return list(dict.fromkeys([BEDROCK_MODEL_ID, *BEDROCK_FALLBACK_MODEL_IDS]))
 
 
 def build_metrics_payload(run: dict, meta: dict) -> dict[str, Any]:
@@ -48,7 +57,7 @@ def generate_summary(user: dict, dataset_id: str) -> dict:
 
     # Return cached summary if present and still valid for latest run
     cached = meta.get("aiSummary")
-    if cached and cached.get("runId") == meta.get("latestRunId"):
+    if cached and cached.get("runId") == meta.get("latestRunId") and not cached.get("offline"):
         return cached
 
     runs = dynamo.query_pk(f"DATASET#{dataset_id}", "RUN#")
@@ -66,7 +75,7 @@ def generate_summary(user: dict, dataset_id: str) -> dict:
         f"METRICS_JSON:\n{json.dumps(metrics, indent=2)}"
     )
 
-    summary_text, recommendations = _invoke_bedrock(prompt, metrics)
+    summary_text, recommendations, model_used = _invoke_bedrock(prompt, metrics)
 
     result = {
         "runId": latest.get("runId"),
@@ -74,7 +83,8 @@ def generate_summary(user: dict, dataset_id: str) -> dict:
         "executive_summary": summary_text,
         "recommendations": recommendations,
         "metrics_used": metrics,  # transparency: what Bedrock saw
-        "model": BEDROCK_MODEL_ID,
+        "model": model_used or "offline-template",
+        "offline": model_used is None,
     }
     dynamo.update_item(
         f"DATASET#{dataset_id}",
@@ -84,36 +94,40 @@ def generate_summary(user: dict, dataset_id: str) -> dict:
     return result
 
 
-def _invoke_bedrock(prompt: str, metrics: dict) -> tuple[str, list[str]]:
-    """Call Bedrock Converse; fall back to deterministic template if unavailable."""
-    try:
-        client = _bedrock()
-        resp = client.converse(
-            modelId=BEDROCK_MODEL_ID,
-            messages=[{"role": "user", "content": [{"text": prompt}]}],
-            inferenceConfig={"maxTokens": 800, "temperature": 0.2},
-        )
+def _invoke_bedrock(prompt: str, metrics: dict) -> tuple[str, list[str], str | None]:
+    """Call Bedrock Converse on each configured model; fall back to a template if all fail."""
+    client = _bedrock()
+    last_error = "no model configured"
+    for model_id in _model_ids():
+        try:
+            resp = client.converse(
+                modelId=model_id,
+                messages=[{"role": "user", "content": [{"text": prompt}]}],
+                inferenceConfig={"maxTokens": 800, "temperature": 0.2},
+            )
+        except Exception as exc:  # noqa: BLE001 — try the next model, then fall back
+            last_error = f"{model_id}: {exc}"
+            continue
         text = ""
         for block in resp.get("output", {}).get("message", {}).get("content", []):
             if "text" in block:
                 text += block["text"]
         parsed = _parse_ai_json(text)
         if parsed:
-            return parsed["executive_summary"], parsed["recommendations"][:3]
+            return parsed["executive_summary"], parsed["recommendations"][:3], model_id
         # If model returned prose, wrap it
-        return text.strip(), _fallback_recommendations(metrics)
-    except Exception as exc:  # noqa: BLE001 — demo resilience without Bedrock access
-        return _fallback_summary(metrics, str(exc))
+        return text.strip(), _fallback_recommendations(metrics), model_id
+    summary, recs = _fallback_summary(metrics, last_error)
+    return summary, recs, None
 
 
 def _parse_ai_json(text: str) -> dict | None:
     text = text.strip()
-    # Extract JSON object if wrapped in markdown fences
-    if "```" in text:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start >= 0 and end > start:
-            text = text[start : end + 1]
+    # Extract the JSON object from fences, preambles or reasoning text
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        text = text[start : end + 1]
     try:
         data = json.loads(text)
         if "executive_summary" in data and "recommendations" in data:

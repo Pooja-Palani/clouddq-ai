@@ -14,7 +14,7 @@ Globals:
         TABLE_NAME: !Ref CloudDQTable
         BUCKET_NAME: !Ref DatasetsBucket
         BEDROCK_MODEL_ID: !Ref BedrockModelId
-        USER_POOL_ID: !Ref UserPool
+        USER_POOL_ID: !Ref ExistingUserPoolId
         LOG_LEVEL: INFO
 
 Parameters:
@@ -26,57 +26,14 @@ Parameters:
     Type: String
     Default: '*'
     Description: Allowed CORS origin for API Gateway
+  ExistingUserPoolId:
+    Type: String
+    Description: Cognito user pool created in the console (groups DataUser and BusinessUser)
+  ExistingUserPoolClientId:
+    Type: String
+    Description: Public app client ID for that user pool
 
 Resources:
-  # ─── Cognito ───────────────────────────────────────────────
-  UserPool:
-    Type: AWS::Cognito::UserPool
-    Properties:
-      UserPoolName: clouddq-users
-      AutoVerifiedAttributes:
-        - email
-      UsernameAttributes:
-        - email
-      Policies:
-        PasswordPolicy:
-          MinimumLength: 8
-          RequireLowercase: true
-          RequireNumbers: true
-          RequireSymbols: false
-          RequireUppercase: true
-      Schema:
-        - Name: email
-          Required: true
-          Mutable: true
-
-  UserPoolClient:
-    Type: AWS::Cognito::UserPoolClient
-    Properties:
-      ClientName: clouddq-web
-      UserPoolId: !Ref UserPool
-      GenerateSecret: false
-      ExplicitAuthFlows:
-        - ALLOW_USER_PASSWORD_AUTH
-        - ALLOW_USER_SRP_AUTH
-        - ALLOW_REFRESH_TOKEN_AUTH
-      PreventUserExistenceErrors: ENABLED
-      SupportedIdentityProviders:
-        - COGNITO
-
-  DataUserGroup:
-    Type: AWS::Cognito::UserPoolGroup
-    Properties:
-      GroupName: DataUser
-      UserPoolId: !Ref UserPool
-      Description: Data analysts — upload, analyze, correct
-
-  BusinessUserGroup:
-    Type: AWS::Cognito::UserPoolGroup
-    Properties:
-      GroupName: BusinessUser
-      UserPoolId: !Ref UserPool
-      Description: Business stakeholders — dashboard, alerts, AI summary
-
   # ─── S3 (private CSV storage) ──────────────────────────────
   DatasetsBucket:
     Type: AWS::S3::Bucket
@@ -185,7 +142,7 @@ Resources:
         AddDefaultAuthorizerToCorsPreflight: false
         Authorizers:
           CognitoAuthorizer:
-            UserPoolArn: !GetAtt UserPool.Arn
+            UserPoolArn: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${ExistingUserPoolId}
 
   ApiLogGroup:
     Type: AWS::Logs::LogGroup
@@ -199,10 +156,10 @@ Outputs:
     Value: !Sub https://${CloudDQApi}.execute-api.${AWS::Region}.amazonaws.com/prod
   UserPoolId:
     Description: Cognito User Pool ID
-    Value: !Ref UserPool
+    Value: !Ref ExistingUserPoolId
   UserPoolClientId:
     Description: Cognito App Client ID
-    Value: !Ref UserPoolClient
+    Value: !Ref ExistingUserPoolClientId
   BucketName:
     Description: Private S3 bucket for CSVs
     Value: !Ref DatasetsBucket

@@ -267,6 +267,38 @@ export function DatasetDetailPage() {
                 <p className="text-sm text-ink-soft">Run analysis more than once to see trends.</p>
               )}
             </div>
+            {dataset.trend && (
+              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
+                <div>
+                  <p className="text-xs text-ink-soft">Trend score</p>
+                  <p className="font-display text-xl">{dataset.trend.trend_score ?? '—'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-soft">Direction</p>
+                  <p
+                    className={
+                      dataset.trend.direction === 'Improving'
+                        ? 'text-sea font-medium'
+                        : dataset.trend.direction === 'Declining'
+                          ? 'text-coral font-medium'
+                          : 'font-medium'
+                    }
+                  >
+                    {dataset.trend.direction}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-soft">Slope / volatility</p>
+                  <p>
+                    {dataset.trend.slope_per_run ?? '—'} pp/run · σ {dataset.trend.volatility ?? '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-soft">Next-run forecast</p>
+                  <p>{dataset.trend.forecast_next ?? '—'}%</p>
+                </div>
+              </div>
+            )}
           </div>
         </section>
       )}

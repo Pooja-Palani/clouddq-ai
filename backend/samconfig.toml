@@ -1,12 +1,9 @@
-version: 0.1
-Default:
-  deploy:
-    parameters:
-      stack_name: clouddq-ai
-      resolve_s3: true
-      region: us-east-1
-      capabilities: CAPABILITY_IAM
-      confirm_changeset: false
-      parameter_overrides:
-        - BedrockModelId=amazon.nova-lite-v1:0
-        - CorsOrigin=*
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "clouddq-ai"
+resolve_s3 = true
+region = "us-east-1"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+parameter_overrides = "BedrockModelId=amazon.nova-lite-v1:0 CorsOrigin=* ExistingUserPoolId=us-east-1_9lWN4OKAr ExistingUserPoolClientId=1m549v3r066u5t2armb5n8tr2t"

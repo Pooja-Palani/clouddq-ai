@@ -21,7 +21,7 @@ sam deploy \
   --resolve-s3 \
   --capabilities CAPABILITY_IAM \
   --no-confirm-changeset \
-  --parameter-overrides "BedrockModelId=amazon.nova-lite-v1:0 CorsOrigin=*"
+  --parameter-overrides "BedrockModelId=amazon.nova-lite-v1:0 CorsOrigin=* ExistingUserPoolId=us-east-1_9lWN4OKAr ExistingUserPoolClientId=1m549v3r066u5t2armb5n8tr2t"
 
 echo "Reading stack outputs..."
 outputs="$(aws cloudformation describe-stacks \

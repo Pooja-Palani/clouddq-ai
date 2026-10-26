@@ -19,8 +19,26 @@ export interface Dataset {
   latestSeverity?: { high: number; medium: number; low: number; total: number }
   latestRunId?: string
   latestDimensions?: Record<string, number>
+  trend?: Trend
   alertId?: string | null
   aiSummary?: AiSummary | null
+}
+
+export interface Trend {
+  runs: number
+  direction: 'Improving' | 'Stable' | 'Declining' | 'Baseline' | 'NoData'
+  trend_score: number | null
+  slope_per_run?: number
+  volatility?: number
+  momentum?: number
+  stability?: number
+  change_total?: number
+  change_last?: number
+  forecast_next?: number
+  best_score?: number
+  worst_score?: number
+  average_score?: number
+  note?: string
 }
 
 export interface AiSummary {

@@ -5,8 +5,10 @@ import csv
 import io
 from typing import Any
 
+from ai import comprehend
 from auth import require_role
 from dq_engine import run_analysis
+from dq_engine.trend import compute_trend
 from store import dynamo, s3
 
 
@@ -127,8 +129,22 @@ def analyze_dataset(user: dict, dataset_id: str, body: dict | None = None) -> di
     previous = runs_sorted[0] if runs_sorted else None
 
     result = run_analysis(csv_text, previous_run=previous)
+    result["pii_hints"] = comprehend.detect_pii_columns(result["profile"], result["pii_hints"])
     run_ts = dynamo.now_iso()
     run_id = run_ts.replace(":", "-")
+
+    run_history = list(meta.get("runHistory") or [])
+    run_history.append(
+        {
+            "runId": run_id,
+            "at": run_ts,
+            "dq_score": result["dq_score"],
+            "health": result["health"],
+        }
+    )
+    # Keep last 20 for trend without new table
+    run_history = run_history[-20:]
+    trend = compute_trend(run_history)
 
     run_item = {
         "PK": f"DATASET#{dataset_id}",
@@ -139,6 +155,7 @@ def analyze_dataset(user: dict, dataset_id: str, body: dict | None = None) -> di
         "createdAt": run_ts,
         "createdBy": user["sub"],
         **{k: v for k, v in result.items()},
+        "trend": trend,
     }
     dynamo.put_item(run_item)
 
@@ -162,18 +179,6 @@ def analyze_dataset(user: dict, dataset_id: str, body: dict | None = None) -> di
             **issue,
         }
         dynamo.put_item(issue_item)
-
-    run_history = list(meta.get("runHistory") or [])
-    run_history.append(
-        {
-            "runId": run_id,
-            "at": run_ts,
-            "dq_score": result["dq_score"],
-            "health": result["health"],
-        }
-    )
-    # Keep last 20 for trend without new table
-    run_history = run_history[-20:]
 
     timeline = _append_timeline(
         {"timeline": timeline}, "Analyzed", f"DQ score {result['dq_score']}%"
@@ -205,6 +210,7 @@ def analyze_dataset(user: dict, dataset_id: str, body: dict | None = None) -> di
             "latestSeverity": result["severity"],
             "latestRunId": run_id,
             "latestDimensions": result["dimensions"],
+            "trend": trend,
             "aiSummary": None,  # invalidate cached summary
         },
     )
@@ -222,6 +228,30 @@ def list_runs(user: dict, dataset_id: str) -> list[dict]:
     runs = dynamo.query_pk(f"DATASET#{dataset_id}", "RUN#")
     runs_sorted = sorted(runs, key=lambda r: r.get("SK", ""))
     return [_public_run(r) for r in runs_sorted]
+
+
+def portfolio_trends(user: dict) -> dict:
+    datasets = list_datasets(user)
+    rows = []
+    for d in datasets:
+        trend = d.get("trend") or compute_trend(d.get("runHistory") or [])
+        rows.append({
+            "datasetId": d["datasetId"],
+            "name": d.get("name"),
+            "latestScore": d.get("latestScore"),
+            **{k: trend.get(k) for k in ("runs", "direction", "trend_score", "slope_per_run", "change_total", "forecast_next")},
+        })
+    scored = [r for r in rows if r["trend_score"] is not None]
+    counts: dict[str, int] = {}
+    for r in rows:
+        counts[r["direction"]] = counts.get(r["direction"], 0) + 1
+    return {
+        "datasets": rows,
+        "counts": counts,
+        "average_trend_score": round(sum(r["trend_score"] for r in scored) / len(scored), 1) if scored else None,
+        "top_improving": sorted(scored, key=lambda r: r["trend_score"], reverse=True)[:5],
+        "top_declining": sorted(scored, key=lambda r: r["trend_score"])[:5],
+    }
 
 
 def get_report(user: dict, dataset_id: str) -> dict:
@@ -254,6 +284,11 @@ def export_report_csv(user: dict, dataset_id: str) -> dict:
     writer.writerow(["Fit for Analytics", run.get("fit_for_analytics")])
     for dim, val in (run.get("dimensions") or {}).items():
         writer.writerow([f"Dimension:{dim}", val])
+    trend = report["dataset"].get("trend") or {}
+    writer.writerow(["Trend direction", trend.get("direction")])
+    writer.writerow(["Trend score", trend.get("trend_score")])
+    writer.writerow(["Trend slope (pp/run)", trend.get("slope_per_run")])
+    writer.writerow(["Trend forecast next run", trend.get("forecast_next")])
     writer.writerow([])
     writer.writerow(["Issue", "Severity", "Status", "Message"])
     for issue in report["issues"]:
@@ -324,6 +359,7 @@ def _public_dataset(item: dict) -> dict:
         "latestSeverity",
         "latestRunId",
         "latestDimensions",
+        "trend",
         "alertId",
         "aiSummary",
     ]

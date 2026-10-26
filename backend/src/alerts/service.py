@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from auth import require_role
-from store import dynamo
+from store import dynamo, sns
 
 
 def create_alert(user: dict, body: dict) -> dict:
@@ -64,6 +64,7 @@ def create_alert(user: dict, body: dict) -> dict:
             "timeline": timeline,
         },
     )
+    item["notified"] = sns.publish_alert(item)
     return _public_alert(item)
 
 

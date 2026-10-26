@@ -10,6 +10,7 @@ backend/.localdata/
 node_modules/
 frontend/dist/
 frontend/.env.local
+frontend/.env.development.local
 *.log
 
 # OS / IDE
@@ -20,3 +21,6 @@ frontend/.env.local
 # Env secrets
 .env
 .env.production
+
+# Lambda deployment bundles
+backend/*.zip

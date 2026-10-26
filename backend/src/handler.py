@@ -63,6 +63,9 @@ def lambda_handler(event, context):
         if method == "GET" and path == "/datasets":
             return ok({"datasets": datasets.list_datasets(user)})
 
+        if method == "GET" and path == "/trends":
+            return ok(datasets.portfolio_trends(user))
+
         m = re.match(r"^/datasets/([^/]+)$", path)
         if m and method == "GET":
             return ok(datasets.get_dataset(user, m.group(1)))
